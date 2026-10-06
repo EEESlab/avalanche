@@ -16,6 +16,7 @@ from torch import sigmoid
 from torch.nn import Module, CrossEntropyLoss
 from torch.optim import Optimizer
 from avalanche.models.packnet import PackNetModel, PackNetModule, PackNetPlugin
+from avalanche.models.piggyback import PiggybackModel, PiggybackPlugin
 
 from avalanche.models.pnn import PNN
 from avalanche.training.plugins.evaluation import (
@@ -265,6 +266,99 @@ class PackNet(SupervisedTemplate):
 
         if not isinstance(self.model, PackNetModule):
             raise ValueError("PackNet requires a model that implements PackNetModule.")
+
+
+class Piggyback(SupervisedTemplate):
+    """Task-incremental continual learning with Piggyback binary masks.
+
+    The strategy keeps a frozen pretrained backbone and learns one binary
+    mask per task, plus an optional classifier head per task. Only the
+    current task's mask and head are trained; the backbone never changes.
+    This guarantees zero catastrophic forgetting by construction.
+
+    The supplied model must be a
+    :class:`~avalanche.models.piggyback.PiggybackModel`.
+
+    Mallya, A., Davis, D., & Lazebnik, S. (2018). Piggyback: Adapting a
+        Single Network to Multiple Tasks by Learning to Mask Weights.
+        ECCV 2018. https://arxiv.org/abs/1801.06519
+    """
+
+    def __init__(
+        self,
+        *,
+        model: PiggybackModel,
+        optimizer: Optimizer,
+        head_factory=None,
+        mask_lr: Optional[float] = 1e-4,
+        criterion=CrossEntropyLoss(),
+        train_mb_size: int = 1,
+        train_epochs: int = 1,
+        eval_mb_size: Optional[int] = None,
+        device: Union[str, torch.device] = "cpu",
+        plugins: Optional[List[SupervisedPlugin]] = None,
+        evaluator: Union[
+            EvaluationPlugin, Callable[[], EvaluationPlugin]
+        ] = default_evaluator,
+        eval_every=-1,
+        **base_kwargs
+    ):
+        """
+        :param model: A pretrained model wrapped with
+            :class:`~avalanche.models.piggyback.PiggybackModel`.
+        :param optimizer: The optimizer to use. Its class and hyperparameters
+            are used to train the current task's masks and head; the backbone
+            is frozen automatically.
+        :param head_factory: Optional callable returning a fresh
+            :class:`nn.Module` for each task (e.g.
+            ``lambda: nn.Linear(512, 2)``). Required when the backbone has no
+            final classifier and each task needs its own output head.
+        :param mask_lr: Learning rate for the masks. Heads always use the
+            optimizer's learning rate. Masks need a much lower one, otherwise
+            weights are switched off almost at random. None uses the
+            optimizer's learning rate for masks too. Defaults to 1e-4.
+        :param criterion: The loss criterion to use.
+        :param train_mb_size: The train minibatch size. Defaults to 1.
+        :param train_epochs: The number of training epochs. Defaults to 1.
+        :param eval_mb_size: The eval minibatch size. Defaults to 1.
+        :param device: The device to use. Defaults to cpu.
+        :param plugins: Additional plugins. Defaults to None.
+        :param evaluator: (optional) instance of EvaluationPlugin for logging
+            and metric computations.
+        :param eval_every: the frequency of the calls to `eval` inside the
+            training loop. -1 disables the evaluation. 0 means `eval` is called
+            only at the end of the learning experience. Values >0 mean that
+            `eval` is called every `eval_every` epochs and at the end of the
+            learning experience.
+        :param base_kwargs: any additional
+            :class:`~avalanche.training.BaseTemplate` constructor arguments.
+        """
+        piggyback = PiggybackPlugin(head_factory=head_factory, mask_lr=mask_lr)
+        # Add plugin to the strategy
+        if plugins is None:
+            plugins = [piggyback]
+        else:
+            plugins.append(piggyback)
+
+        super().__init__(
+            model=model,
+            optimizer=optimizer,
+            criterion=criterion,
+            train_mb_size=train_mb_size,
+            train_epochs=train_epochs,
+            eval_mb_size=eval_mb_size,
+            device=device,
+            plugins=plugins,
+            evaluator=evaluator,
+            eval_every=eval_every,
+            **base_kwargs
+        )
+
+        if not isinstance(self.model, PiggybackModel):
+            raise ValueError(
+                "Piggyback requires a PiggybackModel. "
+                "Wrap your pretrained model with `PiggybackModel(pretrained)`."
+            )
 
 
 class CWRStar(SupervisedTemplate):
@@ -1785,6 +1879,7 @@ __all__ = [
     "BiC",
     "MIR",
     "PackNet",
+    "Piggyback",
     "FromScratchTraining",
     "IL2M",
 ]

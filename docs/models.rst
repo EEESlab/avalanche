@@ -71,6 +71,8 @@ Models
     ExpertGate
     packnet.PackNetModel
     packnet.packnet_simple_mlp
+    piggyback.PiggybackModel
+    piggyback.piggyback_simple_mlp
     FeCAMClassifier
     cosine_layer.CosineLinear
     cosine_layer.SplitCosineLinear

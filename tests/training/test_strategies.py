@@ -54,6 +54,7 @@ from avalanche.training.supervised import (
     MER,
     FeatureReplay,
     IL2M,
+    Piggyback,
 )
 from avalanche.training.supervised.cumulative import Cumulative
 from avalanche.training.supervised.icarl import ICaRL
@@ -69,6 +70,7 @@ from tests.training.test_strategy_utils import run_strategy
 from tests.unit_tests_utils import get_fast_benchmark, get_device
 from torchvision import transforms
 from avalanche.models.utils import FeatureExtractorModel
+from avalanche.models.piggyback import piggyback_simple_mlp
 
 
 class BaseStrategyTest(unittest.TestCase):
@@ -859,6 +861,21 @@ class StrategyTest(unittest.TestCase):
         for train_task in benchmark.train_stream:
             strategy.train(train_task)
         strategy.eval(benchmark.test_stream)
+
+    def test_piggyback(self):
+        # only multi-task scenarios: one mask per task label.
+        model = piggyback_simple_mlp(input_size=6, hidden_size=10)
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+        strategy = Piggyback(
+            model=model,
+            optimizer=optimizer,
+            train_mb_size=10,
+            device=self.device,
+            eval_mb_size=50,
+            train_epochs=2,
+        )
+        benchmark = self.load_benchmark(use_task_labels=True)
+        run_strategy(benchmark, strategy)
 
     def test_expertgate(self):
         # As of PyTorch 2.1.2, adaptive_avg_pool2d_backward_cuda

@@ -84,6 +84,7 @@ Ready-to-use continual learning strategies.
     LearningToPrompt
     SCR
     PackNet
+    Piggyback
     FromScratchTraining
     ExpertGateStrategy
     DER
